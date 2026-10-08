@@ -3,7 +3,7 @@
 #  Ionfetch - Ultra-fast, minimal homelab & server fetch utility
 # ==============================================================================
 
-VERSION="0.2.0"
+VERSION="0.2.1"
 export LC_ALL=C.UTF-8
 
 # Help & Version flags
@@ -198,7 +198,13 @@ fi
 # Resource bars
 resource() {
     local label="$1" percent="${2:-0}" details="$3"
-    local filled color used='' empty='' i
+    local filled color used='' empty='' i display_label
+
+    # Keep all resource bars aligned, even when a mount path is long.
+    display_label="$label"
+    if ((${#display_label} > 20)); then
+        display_label="${display_label:0:17}..."
+    fi
 
     # Clean decimal if present
     percent="${percent%.*}"
@@ -222,8 +228,8 @@ resource() {
         fi
     done
 
-    printf '%s%-16s %s[%s%s%s%s%s] %s%3d%%%s  %s%s%s\n' \
-        "$LABEL" "$label" "$RESET" \
+    printf '%s%-20s %s[%s%s%s%s%s] %s%3d%%%s  %s%s%s\n' \
+        "$LABEL" "$display_label" "$RESET" \
         "$color" "$used" "$GRAY" "$empty" "$RESET" \
         "$color" "$percent" "$RESET" \
         "$WHITE" "$details" "$RESET"
@@ -256,7 +262,7 @@ if [[ -n "$disk_entries" ]]; then
         resource "DISK $disk_number [$disk_mount]" "$disk_percent" "$disk_used_gib/$disk_total_gib GiB"
     done <<< "$disk_entries"
 else
-    printf '%s%-16s%s%s%s\n' "$LABEL" 'DISK' "$YELLOW" 'unavailable' "$RESET"
+    printf '%s%-20s %s%s%s\n' "$LABEL" 'DISK' "$YELLOW" 'unavailable' "$RESET"
 fi
 
 # CPU Load & optional Temperature
