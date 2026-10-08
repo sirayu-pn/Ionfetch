@@ -11,7 +11,8 @@ HOSTNAME / server01
 IP      192.168.1.100
 UPTIME  14d 06h 23m
 RAM     [####......]  41%  6.5/16.0 GiB
-DISK    [######....]  62%  28.4/45.8 GiB
+DISK 1 [/] [######....]  62%  28.4/45.8 GiB
+DISK 2 [/mnt/storage] [####......]  41%  120.0/300.0 GiB
 LOAD    0.45 / 4 cores  (42°C)
 FAILED  0 services
 ```
@@ -97,7 +98,8 @@ EOF
 
 - **Kernel Direct:** Reads metrics directly from `/proc` and `/sys` for near-instant execution without launching heavy tools.
 - **CPU Temperature:** Automatically detects CPU temperature via sysfs thermal zone with color thresholds.
-- **Custom Storage Target:** Inspect root `/` by default, or point to any mounted storage pool via `IONFETCH_DISK_PATH`.
+- **Multiple Storage:** Detects mounted storage filesystems and displays each one as `DISK 1`, `DISK 2`, etc., while ignoring system pseudo-filesystems.
+- **Custom Storage Target:** Inspect only the filesystem containing a selected path via `IONFETCH_DISK_PATH`. Without it, all detected storage filesystems are shown.
 - **Systemd Health:** Detects failed systemd services, lists the top 3 with clean bullets, and links to `systemctl --failed`.
 - **Reboot Alerts:** Displays a warning notice if a system reboot is pending after kernel or security updates (`/var/run/reboot-required`).
 
@@ -111,14 +113,14 @@ Customize behavior by setting environment variables in your shell or `.bashrc`:
 # In your ~/.bashrc or export before running:
 export IONFETCH_TITLE="PROXMOX NODE 01"
 export IONFETCH_SUBTITLE="HOME-DATACENTER / rack-01"
-export IONFETCH_DISK_PATH="/mnt/storage"
+export IONFETCH_DISK_PATH="/mnt/storage"  # optional: show only this filesystem
 ```
 
 | Variable | Default Value | Description |
 | :--- | :--- | :--- |
 | `IONFETCH_TITLE` | Distribution name or `CORE SERVER` | Primary header title |
 | `IONFETCH_SUBTITLE` | `HOSTNAME / <hostname>` | Subtitle text |
-| `IONFETCH_DISK_PATH` | `/` | Mount point / path for disk usage inspection |
+| `IONFETCH_DISK_PATH` | *(unset)* | Optional path; show only the filesystem containing this path |
 | `NO_COLOR` | *(empty)* | Set to `1` or pass `--no-color` to strip color codes |
 
 ---

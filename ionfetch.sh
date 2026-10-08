@@ -3,7 +3,7 @@
 #  Ionfetch - Ultra-fast, minimal homelab & server fetch utility
 # ==============================================================================
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 export LC_ALL=C.UTF-8
 
 # Help & Version flags
@@ -24,7 +24,7 @@ Options:
 Environment Variables:
   IONFETCH_TITLE       Custom header title (default: distro name or "CORE SERVER")
   IONFETCH_SUBTITLE    Custom subtitle (default: "HOSTNAME / <hostname>")
-  IONFETCH_DISK_PATH   Path of the disk/mount to inspect (default: "/")
+  IONFETCH_DISK_PATH   Path of one disk/mount to inspect (default: all storage)
 
 EOF
         exit 0
@@ -147,18 +147,37 @@ ram_used=${ram_used:-0.0}
 ram_total=${ram_total:-0.0}
 ram_percent=${ram_percent:-0}
 
-# Disk Information (configurable via IONFETCH_DISK_PATH)
-disk_target="${IONFETCH_DISK_PATH:-/}"
-read -r disk_used disk_total disk_percent < <(
-    df -Pk "$disk_target" 2>/dev/null | awk 'NR==2 {
-        gsub(/%/, "", $5)
-        printf "%.1f %.1f %d\n",
-            $3/1048576, $2/1048576, $5
-    }'
-)
-disk_used=${disk_used:-0.0}
-disk_total=${disk_total:-0.0}
-disk_percent=${disk_percent:-0}
+# Disk Information. Keep one entry per real filesystem and ignore pseudo mounts.
+disk_target="${IONFETCH_DISK_PATH:-}"
+disk_entries=''
+if [[ -n "$disk_target" ]]; then
+    disk_source=$(df -PkPT "$disk_target" 2>/dev/null | awk 'NR==2 {print $1}')
+    if [[ -n "$disk_source" ]]; then
+        disk_entries=$(df -PkPT "$disk_target" 2>/dev/null | awk -v source="$disk_source" '
+            NR > 1 && $1 == source {
+                used=$4; total=$3; percent=$6; sub(/%$/, "", percent)
+                mount=$7
+                for (i=8; i<=NF; i++) mount=mount " " $i
+                gsub(/\\040/, " ", mount)
+                printf "%s\t%s\t%s\t%s\n", source, mount, used, total " " percent
+                exit
+            }
+        ')
+    fi
+else
+    disk_entries=$(df -PkPT 2>/dev/null | awk '
+        NR == 1 {next}
+        {
+            source=$1; fstype=$2; total=$3; used=$4; percent=$6; sub(/%$/, "", percent)
+            mount=$7
+            for (i=8; i<=NF; i++) mount=mount " " $i
+            gsub(/\\040/, " ", mount)
+            if (fstype ~ /^(rootfs|tmpfs|devtmpfs|proc|sysfs|cgroup|cgroup2|overlay|squashfs|ramfs|securityfs|pstore|debugfs|tracefs|configfs|fusectl|mqueue|hugetlbfs|binfmt_misc|autofs|rpc_pipefs|nsfs|efivarfs|bpf|fuse\.)$/) next
+            if (seen[source]++) next
+            printf "%s\t%s\t%s\t%s %s\n", source, mount, used, total, percent
+        }
+    ')
+fi
 
 # Failed Systemd Services
 if failed=$(systemctl --failed --type=service \
@@ -203,7 +222,7 @@ resource() {
         fi
     done
 
-    printf '%s%-8s%s[%s%s%s%s%s] %s%3d%%%s  %s%s%s\n' \
+    printf '%s%-16s %s[%s%s%s%s%s] %s%3d%%%s  %s%s%s\n' \
         "$LABEL" "$label" "$RESET" \
         "$color" "$used" "$GRAY" "$empty" "$RESET" \
         "$color" "$percent" "$RESET" \
@@ -225,7 +244,20 @@ printf '%s%-8s%s%s%s\n' \
     "$LABEL" 'UPTIME' "$WHITE" "$uptime_text" "$RESET"
 
 resource 'RAM' "$ram_percent" "$ram_used/$ram_total GiB"
-resource 'DISK' "$disk_percent" "$disk_used/$disk_total GiB"
+
+if [[ -n "$disk_entries" ]]; then
+    disk_number=0
+    while IFS=$'\t' read -r disk_source disk_mount disk_used_kib disk_total_percent; do
+        [[ -z "$disk_source" ]] && continue
+        disk_number=$((disk_number + 1))
+        read -r disk_total_kib disk_percent <<< "$disk_total_percent"
+        disk_used_gib=$(awk -v value="$disk_used_kib" 'BEGIN {printf "%.1f", value/1048576}')
+        disk_total_gib=$(awk -v value="$disk_total_kib" 'BEGIN {printf "%.1f", value/1048576}')
+        resource "DISK $disk_number [$disk_mount]" "$disk_percent" "$disk_used_gib/$disk_total_gib GiB"
+    done <<< "$disk_entries"
+else
+    printf '%s%-16s%s%s%s\n' "$LABEL" 'DISK' "$YELLOW" 'unavailable' "$RESET"
+fi
 
 # CPU Load & optional Temperature
 if [[ -n "$cpu_temp" ]]; then
