@@ -3,13 +3,15 @@
 #  Ionfetch - Ultra-fast, minimal homelab & server fetch utility
 # ==============================================================================
 
-VERSION="0.2.1"
-export LC_ALL=C.UTF-8
+VERSION="0.2.2"
+# C locale is available on every supported Linux distribution.
+export LC_ALL=C
 
 # Help & Version flags
-case "${1:-}" in
-    -h|--help)
-        cat <<EOF
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help)
+            cat <<EOF
 Ionfetch v${VERSION}
 Ultra-fast, minimal server status and homelab fetch utility.
 
@@ -27,16 +29,24 @@ Environment Variables:
   IONFETCH_DISK_PATH   Path of one disk/mount to inspect (default: all storage)
 
 EOF
-        exit 0
-        ;;
-    -v|--version)
-        echo "ionfetch v${VERSION}"
-        exit 0
-        ;;
-    --no-color)
-        NO_COLOR=1
-        ;;
-esac
+            exit 0
+            ;;
+        -v|--version)
+            echo "ionfetch v${VERSION}"
+            exit 0
+            ;;
+        --no-color)
+            NO_COLOR=1
+            ;;
+        '')
+            ;;
+        *)
+            printf 'ionfetch: unknown option: %s\n' "$arg" >&2
+            printf 'Try "ionfetch --help" for usage.\n' >&2
+            exit 2
+            ;;
+    esac
+done
 
 # Colors
 if [[ -n "${NO_COLOR:-}" ]]; then

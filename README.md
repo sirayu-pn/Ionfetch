@@ -69,6 +69,16 @@ ionfetch
 | `-v`, `--version` | Display current version |
 | `--no-color` | Disable ANSI colored output |
 
+Multiple options can be combined. Unknown options return an error and exit with status `2`.
+
+### Development Checks
+
+Run the built-in smoke tests with Bash:
+
+```bash
+bash tests/test_ionfetch.sh
+```
+
 ---
 
 ## Run Automatically on SSH Login (MOTD)
