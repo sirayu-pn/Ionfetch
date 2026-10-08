@@ -3,12 +3,17 @@
 #  Ionfetch - Ultra-fast, minimal homelab & server fetch utility
 # ==============================================================================
 
-VERSION="0.2.2"
+VERSION="0.3.0"
 # C locale is available on every supported Linux distribution.
 export LC_ALL=C
 
-# Help & Version flags
-for arg in "$@"; do
+# Parse CLI options. Explicit CLI disk selection overrides the environment.
+cli_disk_path=''
+disk_selection='environment'
+json_output=0
+while (($# > 0)); do
+    arg="$1"
+    shift
     case "$arg" in
         -h|--help)
             cat <<EOF
@@ -22,6 +27,9 @@ Options:
   -h, --help       Show this help message
   -v, --version    Show version information
   --no-color       Disable ANSI color output
+  --disk PATH      Show only the filesystem containing PATH
+  --all-disks      Show all detected storage filesystems
+  --json           Output machine-readable JSON
 
 Environment Variables:
   IONFETCH_TITLE       Custom header title (default: distro name or "CORE SERVER")
@@ -37,6 +45,36 @@ EOF
             ;;
         --no-color)
             NO_COLOR=1
+            ;;
+        --disk)
+            if (($# == 0)) || [[ -z "$1" ]]; then
+                printf 'ionfetch: --disk requires a path\n' >&2
+                exit 2
+            fi
+            cli_disk_path="$1"
+            disk_selection='cli'
+            shift
+            ;;
+        --disk=*)
+            cli_disk_path="${arg#--disk=}"
+            if [[ -z "$cli_disk_path" ]]; then
+                printf 'ionfetch: --disk requires a path\n' >&2
+                exit 2
+            fi
+            disk_selection='cli'
+            ;;
+        --all-disks)
+            disk_selection='all'
+            ;;
+        --json)
+            json_output=1
+            NO_COLOR=1
+            ;;
+        --)
+            if (($# > 0)); then
+                printf 'ionfetch: unexpected argument: %s\n' "$1" >&2
+                exit 2
+            fi
             ;;
         '')
             ;;
@@ -158,7 +196,13 @@ ram_total=${ram_total:-0.0}
 ram_percent=${ram_percent:-0}
 
 # Disk Information. Keep one entry per real filesystem and ignore pseudo mounts.
-disk_target="${IONFETCH_DISK_PATH:-}"
+if [[ "$disk_selection" == 'cli' ]]; then
+    disk_target="$cli_disk_path"
+elif [[ "$disk_selection" == 'all' ]]; then
+    disk_target=''
+else
+    disk_target="${IONFETCH_DISK_PATH:-}"
+fi
 disk_entries=''
 if [[ -n "$disk_target" ]]; then
     disk_source=$(df -PkPT "$disk_target" 2>/dev/null | awk 'NR==2 {print $1}')
@@ -245,9 +289,80 @@ resource() {
         "$WHITE" "$details" "$RESET"
 }
 
-# Display Header
 title="${IONFETCH_TITLE:-${os_name:-CORE SERVER}}"
 subtitle="${IONFETCH_SUBTITLE:-HOSTNAME / ${host}}"
+
+json_escape() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    value="${value//$'\n'/\\n}"
+    value="${value//$'\r'/\\r}"
+    value="${value//$'\t'/\\t}"
+    printf '%s' "$value"
+}
+
+print_json() {
+    local failed_json cpu_temp_json disk_number=0 first_disk=1
+    local disk_source disk_mount disk_used_kib disk_total_percent
+    local disk_total_kib disk_percent disk_used_gib disk_total_gib
+
+    if [[ "$failed_count" == 'unknown' ]]; then
+        failed_json='null'
+    else
+        failed_json="$failed_count"
+    fi
+
+    if [[ -n "$cpu_temp" ]]; then
+        cpu_temp_json="$cpu_temp"
+    else
+        cpu_temp_json='null'
+    fi
+
+    printf '{\n'
+    printf '  "version": "%s",\n' "$(json_escape "$VERSION")"
+    printf '  "os": "%s",\n' "$(json_escape "${os_name:-unknown}")"
+    printf '  "title": "%s",\n' "$(json_escape "$title")"
+    printf '  "subtitle": "%s",\n' "$(json_escape "$subtitle")"
+    printf '  "hostname": "%s",\n' "$(json_escape "$host")"
+    printf '  "ip": "%s",\n' "$(json_escape "$ip_addr")"
+    printf '  "uptime": "%s",\n' "$(json_escape "$uptime_text")"
+    printf '  "load": "%s",\n' "$(json_escape "$load")"
+    printf '  "cores": %s,\n' "$cores"
+    printf '  "cpu_temperature_c": %s,\n' "$cpu_temp_json"
+    printf '  "memory": {"used_gib": %s, "total_gib": %s, "percent": %s},\n' \
+        "$ram_used" "$ram_total" "$ram_percent"
+    printf '  "disks": ['
+
+    if [[ -n "$disk_entries" ]]; then
+        while IFS=$'\t' read -r disk_source disk_mount disk_used_kib disk_total_percent; do
+            [[ -z "$disk_source" ]] && continue
+            disk_number=$((disk_number + 1))
+            read -r disk_total_kib disk_percent <<< "$disk_total_percent"
+            disk_used_gib=$(awk -v value="$disk_used_kib" 'BEGIN {printf "%.1f", value/1048576}')
+            disk_total_gib=$(awk -v value="$disk_total_kib" 'BEGIN {printf "%.1f", value/1048576}')
+            if ((first_disk == 0)); then
+                printf ', '
+            fi
+            first_disk=0
+            printf '{"index": %d, "source": "%s", "mount": "%s", "used_gib": %s, "total_gib": %s, "percent": %s}' \
+                "$disk_number" "$(json_escape "$disk_source")" "$(json_escape "$disk_mount")" \
+                "$disk_used_gib" "$disk_total_gib" "$disk_percent"
+        done <<< "$disk_entries"
+    fi
+
+    printf '],\n'
+    printf '  "failed_services": %s,\n' "$failed_json"
+    printf '  "reboot_required": %s\n' "$([[ "$reboot_required" -eq 1 ]] && echo true || echo false)"
+    printf '}\n'
+}
+
+if ((json_output == 1)); then
+    print_json
+    exit 0
+fi
+
+# Display Header
 
 printf '%s%s%s\n' "$GREEN" "$title" "$RESET"
 printf '%s%s%s\n' "$LABEL" "$subtitle" "$RESET"

@@ -34,9 +34,51 @@ else
 fi
 
 if output=$(bash "$IONFETCH" --no-color --version 2>&1); then
-    assert_contains 'combined options show version' "$output" 'ionfetch v0.2.2'
+    assert_contains 'combined options show version' "$output" 'ionfetch v0.3.0'
 else
     fail 'combined options show version'
+fi
+
+if output=$(bash "$IONFETCH" --json --all-disks 2>&1); then
+    assert_contains 'JSON output has version' "$output" '"version": "0.3.0"'
+    assert_contains 'JSON output has disks' "$output" '"disks": ['
+    assert_contains 'JSON output has reboot flag' "$output" '"reboot_required":'
+else
+    fail 'JSON output succeeds'
+fi
+
+if output=$(IONFETCH_DISK_PATH=/tmp bash "$IONFETCH" --disk / 2>&1); then
+    assert_contains 'CLI disk option overrides environment' "$output" 'DISK 1 [/]'
+else
+    fail 'CLI disk option overrides environment'
+fi
+
+if output=$(bash "$IONFETCH" --disk 2>&1); then
+    fail 'disk option requires a path'
+else
+    status=$?
+    if [[ "$status" -eq 2 ]]; then
+        pass 'disk option requires a path'
+    else
+        fail "disk option returns status 2 (got $status)"
+    fi
+fi
+
+if output=$(bash "$IONFETCH" --disk= 2>&1); then
+    fail 'disk option with empty equals requires a path'
+else
+    status=$?
+    if [[ "$status" -eq 2 ]]; then
+        pass 'disk option with empty equals requires a path'
+    else
+        fail "disk option with empty equals returns status 2 (got $status)"
+    fi
+fi
+
+if output=$(IONFETCH_DISK_PATH=/nonexistent bash "$IONFETCH" --all-disks --no-color 2>&1); then
+    assert_contains '--all-disks overrides IONFETCH_DISK_PATH' "$output" 'DISK'
+else
+    fail '--all-disks overrides IONFETCH_DISK_PATH'
 fi
 
 if output=$(bash "$IONFETCH" --help 2>&1); then

@@ -68,8 +68,23 @@ ionfetch
 | `-h`, `--help` | Show help and available options |
 | `-v`, `--version` | Display current version |
 | `--no-color` | Disable ANSI colored output |
+| `--disk PATH` | Show only the filesystem containing `PATH` |
+| `--all-disks` | Show all detected storage filesystems, ignoring `IONFETCH_DISK_PATH` |
+| `--json` | Output machine-readable JSON |
 
 Multiple options can be combined. Unknown options return an error and exit with status `2`.
+CLI disk options take precedence over `IONFETCH_DISK_PATH`.
+
+Example JSON usage:
+
+```bash
+ionfetch --json --all-disks
+ionfetch --json --disk /mnt/storage
+```
+
+JSON output includes `version`, host information, `memory`, a `disks` array,
+`failed_services`, and `reboot_required`. It can be consumed directly by
+monitoring scripts or tools such as `jq`.
 
 ### Development Checks
 
@@ -110,6 +125,7 @@ EOF
 - **CPU Temperature:** Automatically detects CPU temperature via sysfs thermal zone with color thresholds.
 - **Multiple Storage:** Detects mounted storage filesystems and displays each one as `DISK 1`, `DISK 2`, etc., while ignoring system pseudo-filesystems.
 - **Custom Storage Target:** Inspect only the filesystem containing a selected path via `IONFETCH_DISK_PATH`. Without it, all detected storage filesystems are shown.
+- **Machine-readable Output:** Use `--json` for system, memory, disk, service, and reboot data in a stable JSON structure.
 - **Systemd Health:** Detects failed systemd services, lists the top 3 with clean bullets, and links to `systemctl --failed`.
 - **Reboot Alerts:** Displays a warning notice if a system reboot is pending after kernel or security updates (`/var/run/reboot-required`).
 
